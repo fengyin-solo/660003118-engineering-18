@@ -1,0 +1,102 @@
+# 模板与构建的可重复检查流水线
+# 与本地 `npm run check` 完全同一条链路：依赖锁 -> 模板元数据 -> 类型 -> 构建 -> 本地启动冒烟
+# 任何一个环节失败，对应的 step 会在 PR / 提交页面红色标出，反馈具体失败阶段。
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# GitHub Pages 部署需要 Pages 的写权限
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同一分支的新推送取消正在进行的旧运行，避免重复部署
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: 依赖锁 / 模板校验 / 类型 / 构建 / 启动冒烟
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # 阶段 1：锁文件必须提交，且依赖规格与 package.json 一致；随后 npm ci 严格按锁文件安装
+      - name: 阶段 1/5 依赖锁一致性检查（锁文件存在且与 package.json 同步）
+        working-directory: frontend
+        run: npm run check:lockfile
+
+      - name: 阶段 1/5 依赖安装（npm ci，严格按锁文件）
+        working-directory: frontend
+        run: npm ci --ignore-scripts
+
+      # 阶段 2：模板缺字段 / 非法正则 / 分类与样例问题在此暴露
+      - name: 阶段 2/5 模板元数据校验
+        working-directory: frontend
+        run: npm run validate:templates
+
+      # 阶段 3：vue-tsc 类型检查
+      - name: 阶段 3/5 类型检查
+        working-directory: frontend
+        run: npm run typecheck
+
+      # 阶段 4：生产构建（base 用相对路径，本地 file:// 与 GitHub Pages 子路径都可访问）
+      - name: 阶段 4/5 生产构建
+        working-directory: frontend
+        run: npm run build:only -- --base=./
+
+      # 阶段 5：开发服务器必须能启动并响应首页，模拟本地开发场景
+      - name: 阶段 5/5 本地启动冒烟
+        working-directory: frontend
+        run: npm run smoke:dev
+
+      - name: 上传构建产物（可在本次运行页面下载）
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+          retention-days: 14
+
+  # 仅 main 分支推送时部署到 GitHub Pages；PR 不触发，未开启 Pages 时该作业会明确报错而非静默跳过
+  deploy:
+    name: 部署到 GitHub Pages
+    needs: verify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: 下载 verify 阶段的构建产物
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: dist
+
+      - name: 配置 GitHub Pages
+        id: pages
+        uses: actions/configure-pages@v5
+
+      - name: 上传 Pages 产物
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - name: 部署上线
+        id: deployment
+        uses: actions/deploy-pages@v4

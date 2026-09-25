@@ -1,0 +1,13 @@
+{
+  "name": "regex-visual-debugger-workspace",
+  "version": "1.0.0",
+  "private": true,
+  "description": "仓库根便捷入口：实际工程位于 frontend/，脚本与 CI 均在 frontend 内运行",
+  "scripts": {
+    "dev": "npm --prefix frontend run dev",
+    "check": "npm --prefix frontend run check",
+    "validate:templates": "npm --prefix frontend run validate:templates",
+    "build": "npm --prefix frontend run build",
+    "preview": "npm --prefix frontend run preview"
+  }
+}

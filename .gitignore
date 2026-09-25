@@ -59,9 +59,8 @@ jspm_packages/
 # =========================
 # Lock files
 # =========================
-package-lock.json
-yarn.lock
-pnpm-lock.yaml
+# 应用的依赖锁文件必须提交，保证构建、CI 与本地开发安装出一致的依赖版本
+!frontend/package-lock.json
 
 # =========================
 # Build / Cache / Output

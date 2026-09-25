@@ -59,7 +59,8 @@ jspm_packages/
 # =========================
 # Lock files
 # =========================
-package-lock.json
+# package-lock.json 必须提交：保证各机器/CI/部署环境安装出一致的依赖版本
+# package-lock.json
 yarn.lock
 pnpm-lock.yaml
 

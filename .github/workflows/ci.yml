@@ -1,0 +1,55 @@
+name: CI
+
+# 模板元数据校验、依赖锁文件检查、类型检查、生产构建串成一条流水线，
+# 任一环节失败会在对应步骤标红并中断；main 分支构建通过后产出可部署产物。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify:
+    name: 校验 · 构建
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # 严格按锁文件安装；锁文件缺失或与 package.json 不一致会直接失败
+      - name: 按锁文件干净安装（npm ci）
+        run: npm ci
+
+      # 完整可重复流程：环境 → 锁文件 → 模板元数据 → 类型检查 → 生产构建
+      - name: 前置检查与构建（preflight --ci）
+        run: npm run verify
+
+      - name: 上传构建产物
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+          retention-days: 7
+
+  deploy-gate:
+    name: 部署门禁
+    needs: verify
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: 校验通过，允许部署
+        run: |
+          echo "前置检查与构建已通过，frontend/dist 可由部署环节发布。"
+          echo "在实际部署平台中把本步骤替换为静态托管发布，或直接运行: npm run deploy"
